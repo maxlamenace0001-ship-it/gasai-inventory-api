@@ -1,147 +1,178 @@
+// server.js — version propre & stable pour Railway
+
 require("dotenv").config();
 const express = require("express");
 const multer = require("multer");
 const fs = require("fs");
+const path = require("path");
 const OpenAI = require("openai");
 const cors = require("cors");
-const path = require("path");
-
 
 const app = express();
-const port = process.env.PORT || 8080;
+const PORT = process.env.PORT || 8080;
 
+// CORS pour pouvoir appeler l’API depuis le front
 app.use(cors());
 
-// Config upload (stockage temporaire)
+// ----- Upload temporaire des images -----
 const upload = multer({ dest: "uploads/" });
 
-// OpenAI client
+// ----- Client OpenAI -----
+if (!process.env.OPENAI_API_KEY) {
+  console.warn("⚠️ OPENAI_API_KEY n'est pas défini dans les variables d'environnement !");
+}
+
 const client = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
-// Convertir une image en base64
-function toBase64(path) {
-  const data = fs.readFileSync(path);
+// ----- Helper : fichier → base64 -----
+function fileToBase64(filePath) {
+  const data = fs.readFileSync(filePath);
   return data.toString("base64");
 }
 
-// Route principale : renvoie la page web
+// ----- Route santé pour Railway -----
+app.get("/health", (req, res) => {
+  res.json({ status: "ok" });
+});
+
+// ----- Route principale : sert la page HTML -----
 app.get("/", (req, res) => {
   res.sendFile(path.join(__dirname, "index.html"));
 });
 
-// Route d'analyse d'image
+// ----- Route d’analyse d’image -----
 app.post("/analyze", upload.single("file"), async (req, res) => {
   if (!req.file) {
     return res.status(400).json({ error: "Aucune image reçue." });
   }
 
+  const imagePath = req.file.path;
+
   try {
-    const imageBase64 = toBase64(req.file.path);
+    const imageBase64 = fileToBase64(imagePath);
 
-    // Prompt pour l'inventaire
+    // Prompt d’inventaire
     const prompt = `
-Tu es un expert en inventaire visuel pour des commerces.
-Analyse l'image et renvoie un JSON structuré :
+Tu es un expert en inventaire visuel pour les commerces.
+Tu reçois une photo d'un rayon / tablette de magasin (vue globale).
 
+Objectif :
+- Identifier les produits principaux visibles.
+- Pour chaque type de produit, retourner :
+  - "label" : nom / description du produit (en français simple).
+  - "brand" : marque si visible (sinon chaîne vide).
+  - "estimated_quantity" : estimation du nombre d'unités visibles (entier, même si approximatif).
+  - "position" : position sur la tablette (ex: "haut gauche", "milieu centre", "bas droite").
+  - "confidence" : niveau de confiance entre 0 et 1 (ex: 0.82).
+
+Réponds STRICTEMENT au format JSON suivant :
 {
   "inventory": [
     {
-      "label": "nom du produit",
-      "brand": "marque ou null",
-      "estimated_quantity": nombre entier,
-      "confidence": nombre entre 0 et 1,
-      "position": "haut/milieu/bas ou null"
+      "label": "...",
+      "brand": "...",
+      "estimated_quantity": 0,
+      "position": "...",
+      "confidence": 0.0
     }
   ]
 }
+Aucun texte en dehors du JSON.
+    `.trim();
 
-Respecte strictement ce format JSON.
-`;
-
-    const response = await client.chat.completions.create({
+    // Appel OpenAI Responses API
+    const response = await client.responses.create({
       model: "gpt-4.1-mini",
-      messages: [
-        { role: "system", content: prompt },
+      input: [
+        {
+          role: "system",
+          content: [
+            {
+              type: "input_text",
+              text: "Tu es un assistant spécialisé en analyse d'images de rayons de magasin et tu renvoies uniquement du JSON valide.",
+            },
+          ],
+        },
         {
           role: "user",
           content: [
             {
-              type: "text",
-              text: "Analyse ce rayon."
+              type: "input_text",
+              text: prompt,
             },
             {
-              type: "image_url",
+              type: "input_image",
               image_url: {
-                url: `data:image/png;base64,${imageBase64}`
-              }
-            }
+                url: `data:image/jpeg;base64,${imageBase64}`,
+              },
+            },
           ],
         },
       ],
-      response_format: { type: "json_object" },
-      temperature: 0.2,
+      response_format: {
+        type: "json_schema",
+        json_schema: {
+          name: "inventory_schema",
+          strict: true,
+          schema: {
+            type: "object",
+            properties: {
+              inventory: {
+                type: "array",
+                items: {
+                  type: "object",
+                  properties: {
+                    label: { type: "string" },
+                    brand: { type: "string" },
+                    estimated_quantity: { type: "integer" },
+                    position: { type: "string" },
+                    confidence: { type: "number" },
+                  },
+                  required: [
+                    "label",
+                    "brand",
+                    "estimated_quantity",
+                    "position",
+                    "confidence",
+                  ],
+                  additionalProperties: false,
+                },
+              },
+            },
+            required: ["inventory"],
+            additionalProperties: false,
+          },
+        },
+      },
     });
 
-    const raw = response.choices[0].message.content;
-
+    // Récupération du JSON retourné
+    const first = response.output[0].content[0];
     let parsed;
-    try {
-      parsed = JSON.parse(raw);
-    } catch {
-      parsed = { error: "Réponse non parsable", raw };
+
+    if (first.type === "output_text") {
+      parsed = JSON.parse(first.text);
+    } else if (first.type === "output_json") {
+      parsed = first.json;
+    } else {
+      throw new Error("Format de sortie OpenAI inattendu");
     }
 
-    // 🔽🔽🔽 AJOUT : génération automatique du CSV 🔽🔽🔽
-    try {
-      const inventory = parsed.inventory || [];
-
-      // Lignes du CSV
-      const csvLines = ["label,brand,estimated_quantity,position,confidence"];
-
-      inventory.forEach((item) => {
-        const label = (item.label || "").replace(/,/g, " ");
-        const brand = (item.brand || "").replace(/,/g, " ");
-        const qty = item.estimated_quantity ?? "";
-        const pos = (item.position || "").replace(/,/g, " ");
-        const conf = item.confidence ?? "";
-
-        csvLines.push(`${label},${brand},${qty},${pos},${conf}`);
-      });
-
-      const csvContent = csvLines.join("\n");
-
-      // Dossier d'export
-      const exportDir = "exports";
-      if (!fs.existsSync(exportDir)) {
-        fs.mkdirSync(exportDir);
-      }
-
-      // Nom de fichier avec timestamp
-      const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
-      const csvPath = `${exportDir}/inventory_${timestamp}.csv`;
-
-      fs.writeFileSync(csvPath, csvContent, "utf8");
-
-      // On ajoute le chemin du CSV dans la réponse JSON
-      parsed.csv_path = csvPath;
-    } catch (e) {
-      console.error("Erreur lors de la génération du CSV:", e);
-    }
-    // 🔼🔼🔼 FIN DE L’AJOUT CSV 🔼🔼🔼
-
-    fs.unlink(req.file.path, () => { }); // Nettoyage image temporaire
+    // Nettoyage du fichier temporaire
+    fs.unlink(imagePath, () => {});
 
     return res.json(parsed);
   } catch (err) {
     console.error("Erreur API :", err);
-    fs.unlink(req.file.path, () => { });
+    fs.unlink(imagePath, () => {});
     return res.status(500).json({ error: "Erreur interne API" });
   }
 });
 
-app.listen(port, "0.0.0.0", () => {
+// ----- Lancement du serveur -----
+app.listen(PORT, "0.0.0.0", () => {
   console.log("GasAI Inventory API déployée !");
-  console.log(`🚀 GasAI Inventory API active sur http://localhost:${port}`);
+  console.log(`🚀 GasAI Inventory API active sur http://localhost:${PORT}`);
 });
