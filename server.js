@@ -142,5 +142,6 @@ Respecte strictement ce format JSON.
 });
 
 app.listen(port, () => {
+  console.log("GasAI Inventory API déployée !");
   console.log(`🚀 GasAI Inventory API active sur http://localhost:${port}`);
 });

@@ -233,6 +233,9 @@
   </div>
 
   <script>
+    // ✅ Nouvelle ligne : URL de l’API sur Railway
+    const API_URL = "https://gasai-inventory-api-production.up.railway.app";
+
     const fileInput = document.getElementById("file-input");
     const statusEl = document.getElementById("status");
     const logEl = document.getElementById("log");
@@ -265,8 +268,10 @@
       formData.append("file", file);
 
       try {
-        logLine("Envoi vers /analyze …");
-        const response = await fetch("/analyze", {
+        logLine("Envoi vers /analyze sur Railway …");
+
+        // ✅ ICI la vraie modif importante
+        const response = await fetch(`${API_URL}/analyze`, {
           method: "POST",
           body: formData,
         });
@@ -286,7 +291,6 @@
         statusEl.className = "status ok";
 
         afficherInventaire(data.inventory || []);
-
       } catch (err) {
         statusEl.textContent = "Erreur : " + err;
         statusEl.className = "status error";
