@@ -161,18 +161,18 @@ Aucun texte en dehors du JSON.
     }
 
     // Nettoyage du fichier temporaire
-    fs.unlink(imagePath, () => {});
+    fs.unlink(imagePath, () => { });
 
     return res.json(parsed);
   } catch (err) {
     console.error("Erreur API :", err);
-    fs.unlink(imagePath, () => {});
+    fs.unlink(imagePath, () => { });
     return res.status(500).json({ error: "Erreur interne API" });
   }
 });
 
 // ----- Lancement du serveur -----
-app.listen(PORT, "0.0.0.0", () => {
+app.listen(port, () => {
   console.log("GasAI Inventory API déployée !");
-  console.log(`🚀 GasAI Inventory API active sur http://localhost:${PORT}`);
+  console.log(`🚀 GasAI Inventory API active sur port Railway : ${port}`);
 });
