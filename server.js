@@ -172,7 +172,7 @@ Aucun texte en dehors du JSON.
 });
 
 // ----- Lancement du serveur -----
-app.listen(port, () => {
+app.listen(PORT, () => {
   console.log("GasAI Inventory API déployée !");
-  console.log(`🚀 GasAI Inventory API active sur port Railway : ${port}`);
+  console.log(`🚀 GasAI Inventory API active sur port Railway : ${PORT}`);
 });
