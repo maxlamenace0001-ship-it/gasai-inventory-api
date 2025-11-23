@@ -8,7 +8,7 @@ const path = require("path");
 
 
 const app = express();
-const PORT = process.env.PORT || 8080;
+const port = process.env.PORT || 8080;
 
 app.use(cors());
 
@@ -143,5 +143,5 @@ Respecte strictement ce format JSON.
 
 app.listen(port, "0.0.0.0", () => {
   console.log("GasAI Inventory API déployée !");
-  console.log(`🚀 GasAI Inventory API active sur port ${port}`);
+  console.log(`🚀 GasAI Inventory API active sur http://localhost:${port}`);
 });
