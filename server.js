@@ -9,12 +9,13 @@ const OpenAI = require("openai");
 const cors = require("cors");
 
 const app = express();
-const PORT = process.env.PORT || 8080;
+const PORT = process.env.PORT;
 
 // CORS pour pouvoir appeler l’API depuis le front
 app.use(cors());
 
 // ----- Upload temporaire des images -----
+
 const upload = multer({ dest: "uploads/" });
 
 // ----- Client OpenAI -----
