@@ -83,39 +83,29 @@ Aucun texte en dehors du JSON.
     `.trim();
 
     // Appel OpenAI Responses API
-    const response = await client.responses.create({
-      model: "gpt-4.1-mini",
-      input: [
+    // Appel OpenAI (chat + image)
+    const openaiResponse = await client.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [
         {
           role: "system",
-          content: [
-            {
-              type: "input_text",
-              text: "Tu es un assistant spécialisé en analyse d'images de rayons de magasin et tu renvoies uniquement du JSON valide.",
-            },
-          ],
+          content: "Tu es un expert en inventaire visuel pour les commerces."
         },
         {
           role: "user",
           content: [
-            {
-              type: "input_text",
-              text: prompt,
-            },
+            { type: "text", text: prompt },
             {
               type: "input_image",
-              image_url: {
-                url: `data:image/jpeg;base64,${imageBase64}`,
-              },
-            },
-          ],
-        },
+              image_url: `data:image/jpeg;base64,${imageBase64}`
+            }
+          ]
+        }
       ],
       response_format: {
         type: "json_schema",
         json_schema: {
           name: "inventory_schema",
-          strict: true,
           schema: {
             type: "object",
             properties: {
@@ -128,42 +118,32 @@ Aucun texte en dehors du JSON.
                     brand: { type: "string" },
                     estimated_quantity: { type: "integer" },
                     position: { type: "string" },
-                    confidence: { type: "number" },
+                    confidence: { type: "number" }
                   },
                   required: [
                     "label",
                     "brand",
                     "estimated_quantity",
                     "position",
-                    "confidence",
-                  ],
-                  additionalProperties: false,
-                },
-              },
-            },
-            required: ["inventory"],
-            additionalProperties: false,
-          },
-        },
-      },
+                    "confidence"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
     });
 
-    // Récupération du JSON retourné
-    const first = response.output[0].content[0];
-    let parsed;
-
-    if (first.type === "output_text") {
-      parsed = JSON.parse(first.text);
-    } else if (first.type === "output_json") {
-      parsed = first.json;
-    } else {
-      throw new Error("Format de sortie OpenAI inattendu");
-    }
+    // Le JSON retourné par OpenAI
+    const parsed = JSON.parse(openaiResponse.choices[0].message.content);
 
     // Nettoyage du fichier temporaire
     fs.unlink(imagePath, () => { });
 
+    // Réponse au frontend
     return res.json(parsed);
+
   } catch (err) {
     console.error("Erreur API :", err);
     fs.unlink(imagePath, () => { });
