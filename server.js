@@ -9,7 +9,7 @@ const OpenAI = require("openai");
 const cors = require("cors");
 
 const app = express();
-const PORT = process.env.PORT;
+const PORT = process.env.PORT || 8080;
 
 // CORS pour pouvoir appeler l’API depuis le front
 app.use(cors());
